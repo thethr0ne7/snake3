@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>Мини-игра: Змейка (порталы + яд)</title>
+  <title>Мини-игра: Змейка (порталы + яд + свайп)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     * {
@@ -89,6 +89,7 @@
       width: 100%;
       height: auto;
       display: block;
+      touch-action: none; /* чтобы жесты не скроллили страницу */
     }
 
     .status {
@@ -112,59 +113,15 @@
     .legend span {
       font-weight: 500;
     }
-
-    .controls {
-      margin-top: 8px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .controls-row {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-    }
-
-    .control-btn {
-      min-width: 56px;
-      min-height: 40px;
-      border-radius: 999px;
-      border: 1px solid #1f2933;
-      background: #020617;
-      color: #e5e7eb;
-      font-size: 18px;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 4px 12px;
-      cursor: pointer;
-      touch-action: manipulation;
-    }
-
-    .control-btn:active {
-      transform: scale(0.95);
-      border-color: #22c55e;
-    }
-
-    @media (min-width: 768px) {
-      .controls {
-        display: none; /* На десктопе скрываем кнопки, оставляем клавиатуру */
-      }
-    }
   </style>
 </head>
 <body>
   <div class="game-wrapper">
     <div class="header">
       <div class="logo-title">
-        <!-- ЗДЕСЬ ТВОЙ ЛОГОТИП
-             Поставь свой файл, например: src="my-logo.png"
-             или ссылку: src="https://example.com/logo.png" -->
+        <!-- Логотип из папки assets -->
         <img src="assets/Ресурс 6КАПЛИСТАКАНА.png" alt="Логотип" />
-        <div class="title"> любимая змейка у трона</div>
+        <div class="title">любимая змейка ДИАНКА </div>
       </div>
       <div class="score">Счёт: <span id="score">0</span></div>
     </div>
@@ -173,23 +130,12 @@
 
     <div class="status" id="status">
       ПК: стрелки — управление, <span>пробел</span> — перезапуск.
-      Мобильные: кнопки ниже.
+      Телефон: свайпы по полю (вверх/вниз/влево/вправо).
     </div>
     <div class="legend">
       <span>Красный куб</span> — еда (растёт длина, +1 очко).<br />
       <span>Фиолетовый куб</span> — яд (уменьшает длину, −1 очко).<br />
       Края поля — порталы: вылетел — появляешься с другой стороны.
-    </div>
-
-    <div class="controls">
-      <div class="controls-row">
-        <button class="control-btn" data-dir="up">↑</button>
-      </div>
-      <div class="controls-row">
-        <button class="control-btn" data-dir="left">←</button>
-        <button class="control-btn" data-dir="down">↓</button>
-        <button class="control-btn" data-dir="right">→</button>
-      </div>
     </div>
   </div>
 
@@ -234,7 +180,7 @@
       poison = randomFreeCell([food]); // яд не совпадает с едой
 
       setStatus(
-        "ПК: стрелки — управление, <span>пробел</span> — перезапуск. Мобильные: кнопки ниже."
+        "ПК: стрелки — управление, <span>пробел</span> — перезапуск. Телефон: свайпы по полю."
       );
 
       if (timerId) clearInterval(timerId);
@@ -368,11 +314,11 @@
       setStatus(
         "Игра окончена. Счёт: <span>" +
           score +
-          "</span>. Нажми <span>пробел</span> (ПК) или перезагрузи страницу на мобильном."
+          "</span>. На ПК нажми <span>пробел</span>, чтобы начать заново; на телефоне просто перезагрузи страницу."
       );
     }
 
-    // === Управление: клавиатура ===
+    // === Управление: клавиатура (ПК) ===
     document.addEventListener("keydown", (e) => {
       if (gameOver && e.code === "Space") {
         e.preventDefault();
@@ -396,35 +342,60 @@
       }
     });
 
-    // === Управление: мобильные кнопки ===
-    function setDirection(dir) {
-      switch (dir) {
-        case "up":
-          if (velocity.y === 0) velocity = { x: 0, y: -1 };
-          break;
-        case "down":
-          if (velocity.y === 0) velocity = { x: 0, y: 1 };
-          break;
-        case "left":
-          if (velocity.x === 0) velocity = { x: -1, y: 0 };
-          break;
-        case "right":
-          if (velocity.x === 0) velocity = { x: 1, y: 0 };
-          break;
-      }
-    }
+    // === Управление: свайпы по экрану (мобильные) ===
+    let touchStartX = null;
+    let touchStartY = null;
 
-    document.querySelectorAll(".control-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const dir = btn.getAttribute("data-dir");
-        setDirection(dir);
-      });
-    });
+    canvas.addEventListener("touchstart", (e) => {
+      const t = e.touches[0];
+      touchStartX = t.clientX;
+      touchStartY = t.clientY;
+    }, { passive: false });
+
+    canvas.addEventListener("touchmove", (e) => {
+      // блокируем скролл страницы во время жеста
+      e.preventDefault();
+    }, { passive: false });
+
+    canvas.addEventListener("touchend", (e) => {
+      if (touchStartX === null || touchStartY === null) return;
+
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touchStartX;
+      const dy = t.clientY - touchStartY;
+
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+
+      // минимальная длина свайпа, чтобы не реагировать на случайные касания
+      const minSwipe = 20;
+
+      if (absDx < minSwipe && absDy < minSwipe) {
+        touchStartX = touchStartY = null;
+        return;
+      }
+
+      if (absDx > absDy) {
+        // горизонтальный свайп
+        if (dx > 0 && velocity.x === 0) {
+          velocity = { x: 1, y: 0 }; // вправо
+        } else if (dx < 0 && velocity.x === 0) {
+          velocity = { x: -1, y: 0 }; // влево
+        }
+      } else {
+        // вертикальный свайп
+        if (dy > 0 && velocity.y === 0) {
+          velocity = { x: 0, y: 1 }; // вниз
+        } else if (dy < 0 && velocity.y === 0) {
+          velocity = { x: 0, y: -1 }; // вверх
+        }
+      }
+
+      touchStartX = touchStartY = null;
+    }, { passive: false });
 
     // === Старт ===
     resetGame();
   </script>
 </body>
 </html>
-
-
