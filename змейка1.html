@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>Мини-игра: Змейка (порталы + яд + свайп)</title>
+  <title>Мини-игра: Змейка (порталы + яд + сердечко + свайп)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     * {
@@ -121,7 +121,7 @@
       <div class="logo-title">
         <!-- Логотип из папки assets -->
         <img src="assets/Ресурс 6КАПЛИСТАКАНА.png" alt="Логотип" />
-        <div class="title">любимая змейка дианка </div>
+        <div class="title">любимая змейка у трона</div>
       </div>
       <div class="score">Счёт: <span id="score">0</span></div>
     </div>
@@ -133,7 +133,7 @@
       Телефон: свайпы по полю (вверх/вниз/влево/вправо).
     </div>
     <div class="legend">
-      <span>Красный куб</span> — еда (растёт длина, +1 очко).<br />
+      <span>Сердечко ♥</span> — еда (растёт длина, +1 очко).<br />
       <span>Фиолетовый куб</span> — яд (уменьшает длину, −1 очко).<br />
       Края поля — порталы: вылетел — появляешься с другой стороны.
     </div>
@@ -154,7 +154,9 @@
     let poison;
     let score;
     let gameOver;
-    let tickInterval = 145; // скорость (меньше = быстрее)
+
+    // замедлили змейку: было 110
+    let tickInterval = 160;
     let timerId = null;
 
     const MIN_LENGTH = 2;
@@ -277,16 +279,18 @@
         ctx.stroke();
       }
 
-      // еда (красная)
+      // еда — сердечко
       ctx.fillStyle = "#ef4444";
-      ctx.fillRect(
-        food.x * gridSize + 2,
-        food.y * gridSize + 2,
-        gridSize - 4,
-        gridSize - 4
+      ctx.font = `${gridSize}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(
+        "♥",
+        food.x * gridSize + gridSize / 2,
+        food.y * gridSize + gridSize / 2
       );
 
-      // яд (фиолетовый)
+      // яд (фиолетовый куб)
       ctx.fillStyle = "#a855f7";
       ctx.fillRect(
         poison.x * gridSize + 2,
@@ -346,57 +350,65 @@
     let touchStartX = null;
     let touchStartY = null;
 
-    canvas.addEventListener("touchstart", (e) => {
-      const t = e.touches[0];
-      touchStartX = t.clientX;
-      touchStartY = t.clientY;
-    }, { passive: false });
+    canvas.addEventListener(
+      "touchstart",
+      (e) => {
+        const t = e.touches[0];
+        touchStartX = t.clientX;
+        touchStartY = t.clientY;
+      },
+      { passive: false }
+    );
 
-    canvas.addEventListener("touchmove", (e) => {
-      // блокируем скролл страницы во время жеста
-      e.preventDefault();
-    }, { passive: false });
+    canvas.addEventListener(
+      "touchmove",
+      (e) => {
+        // блокируем скролл страницы во время жеста
+        e.preventDefault();
+      },
+      { passive: false }
+    );
 
-    canvas.addEventListener("touchend", (e) => {
-      if (touchStartX === null || touchStartY === null) return;
+    canvas.addEventListener(
+      "touchend",
+      (e) => {
+        if (touchStartX === null || touchStartY === null) return;
 
-      const t = e.changedTouches[0];
-      const dx = t.clientX - touchStartX;
-      const dy = t.clientY - touchStartY;
+        const t = e.changedTouches[0];
+        const dx = t.clientX - touchStartX;
+        const dy = t.clientY - touchStartY;
 
-      const absDx = Math.abs(dx);
-      const absDy = Math.abs(dy);
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
 
-      // минимальная длина свайпа, чтобы не реагировать на случайные касания
-      const minSwipe = 20;
+        const minSwipe = 20;
 
-      if (absDx < minSwipe && absDy < minSwipe) {
+        if (absDx < minSwipe && absDy < minSwipe) {
+          touchStartX = touchStartY = null;
+          return;
+        }
+
+        if (absDx > absDy) {
+          if (dx > 0 && velocity.x === 0) {
+            velocity = { x: 1, y: 0 }; // вправо
+          } else if (dx < 0 && velocity.x === 0) {
+            velocity = { x: -1, y: 0 }; // влево
+          }
+        } else {
+          if (dy > 0 && velocity.y === 0) {
+            velocity = { x: 0, y: 1 }; // вниз
+          } else if (dy < 0 && velocity.y === 0) {
+            velocity = { x: 0, y: -1 }; // вверх
+          }
+        }
+
         touchStartX = touchStartY = null;
-        return;
-      }
-
-      if (absDx > absDy) {
-        // горизонтальный свайп
-        if (dx > 0 && velocity.x === 0) {
-          velocity = { x: 1, y: 0 }; // вправо
-        } else if (dx < 0 && velocity.x === 0) {
-          velocity = { x: -1, y: 0 }; // влево
-        }
-      } else {
-        // вертикальный свайп
-        if (dy > 0 && velocity.y === 0) {
-          velocity = { x: 0, y: 1 }; // вниз
-        } else if (dy < 0 && velocity.y === 0) {
-          velocity = { x: 0, y: -1 }; // вверх
-        }
-      }
-
-      touchStartX = touchStartY = null;
-    }, { passive: false });
+      },
+      { passive: false }
+    );
 
     // === Старт ===
     resetGame();
   </script>
 </body>
 </html>
-
