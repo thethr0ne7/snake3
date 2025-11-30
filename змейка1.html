@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>Мини-игра: Змейка (порталы + яд + сердечко + свайп)</title>
+  <title>Мини-игра: Змейка (кофе + стоп-знак)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     * {
@@ -89,7 +89,7 @@
       width: 100%;
       height: auto;
       display: block;
-      touch-action: none; /* чтобы жесты не скроллили страницу */
+      touch-action: none;
     }
 
     .status {
@@ -119,9 +119,8 @@
   <div class="game-wrapper">
     <div class="header">
       <div class="logo-title">
-        <!-- Логотип из папки assets -->
         <img src="assets/Ресурс 6КАПЛИСТАКАНА.png" alt="Логотип" />
-        <div class="title">сердцеедка</div>
+        <div class="title">любимая змейка </div>
       </div>
       <div class="score">Счёт: <span id="score">0</span></div>
     </div>
@@ -129,25 +128,24 @@
     <canvas id="game" width="400" height="400"></canvas>
 
     <div class="status" id="status">
-      ПК: стрелки — управление, <span>пробел</span> — перезапуск.
-      Телефон: свайпы по полю (вверх/вниз/влево/вправо).
+      ПК: стрелки — управление, <span>пробел</span> — перезапуск.  
+      Телефон: свайпы по полю.
     </div>
+
     <div class="legend">
-      <span>Сердечко ♥</span> — еда (растёт длина, +1 очко).<br />
-      <span>Фиолетовый куб</span> — яд (уменьшает длину, −1 очко).<br />
-      Края поля — порталы: вылетел — появляешься с другой стороны.
+      ☕ — еда (рост +1)<br/>
+      🛑 — яд (− длина, −1 очко)<br/>
+      Порталы — выходишь и появляешься с другой стороны.
     </div>
   </div>
 
   <script>
-    // === Параметры поля ===
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
 
-    const tileCount = 20; // 20×20
-    const gridSize = canvas.width / tileCount; // 400 / 20 = 20 px
+    const tileCount = 20;
+    const gridSize = canvas.width / tileCount;
 
-    // === Состояние игры ===
     let snake;
     let velocity;
     let food;
@@ -155,8 +153,7 @@
     let score;
     let gameOver;
 
-    // замедлили змейку: было 110
-    let tickInterval = 160;
+    let tickInterval = 170; 
     let timerId = null;
 
     const MIN_LENGTH = 2;
@@ -166,7 +163,6 @@
       document.getElementById("status").innerHTML = text;
     }
 
-    // === Инициализация игры ===
     function resetGame() {
       snake = [
         { x: 10, y: 10 },
@@ -178,95 +174,76 @@
       gameOver = false;
       document.getElementById("score").textContent = score;
 
-      food = randomFreeCell();
-      poison = randomFreeCell([food]); // яд не совпадает с едой
+      food = randomFree();
+      poison = randomFree([food]);
 
-      setStatus(
-        "ПК: стрелки — управление, <span>пробел</span> — перезапуск. Телефон: свайпы по полю."
-      );
+      setStatus("ПК: стрелки, пробел. Телефон: свайпы.");
 
       if (timerId) clearInterval(timerId);
       timerId = setInterval(update, tickInterval);
       draw();
     }
 
-    // === Выбор случайной свободной клетки ===
-    function randomFreeCell(extraBlocked = []) {
+    function randomFree(block = []) {
       while (true) {
         const x = Math.floor(Math.random() * tileCount);
         const y = Math.floor(Math.random() * tileCount);
 
-        const onSnake = snake && snake.some((s) => s.x === x && s.y === y);
-        const onExtra = extraBlocked.some((p) => p.x === x && p.y === y);
+        const onSnake = snake.some((s) => s.x === x && s.y === y);
+        const onBlock = block.some((b) => b.x === x && b.y === y);
 
-        if (!onSnake && !onExtra) {
-          return { x, y };
-        }
+        if (!onSnake && !onBlock) return { x, y };
       }
     }
 
-    // === Основной шаг игры ===
     function update() {
       if (gameOver) return;
 
-      let nextX = snake[0].x + velocity.x;
-      let nextY = snake[0].y + velocity.y;
+      let nx = snake[0].x + velocity.x;
+      let ny = snake[0].y + velocity.y;
 
-      // Порталы по краям: тороидальное поле
-      if (nextX < 0) nextX = tileCount - 1;
-      if (nextX >= tileCount) nextX = 0;
-      if (nextY < 0) nextY = tileCount - 1;
-      if (nextY >= tileCount) nextY = 0;
+      if (nx < 0) nx = tileCount - 1;
+      if (nx >= tileCount) nx = 0;
+      if (ny < 0) ny = tileCount - 1;
+      if (ny >= tileCount) ny = 0;
 
-      const head = { x: nextX, y: nextY };
+      const head = { x: nx, y: ny };
 
-      // Столкновение с собой
-      if (snake.some((segment) => segment.x === head.x && segment.y === head.y)) {
-        endGame();
+      if (snake.some((s) => s.x === head.x && s.y === head.y)) {
+        end();
         return;
       }
 
-      // Двигаем голову
       snake.unshift(head);
 
       const hitFood = head.x === food.x && head.y === food.y;
       const hitPoison = head.x === poison.x && head.y === poison.y;
 
       if (hitFood) {
-        // ЕДА: растём и набираем очки
         score++;
         document.getElementById("score").textContent = score;
-        food = randomFreeCell([poison]); // новая еда не совпадает с ядом
+        food = randomFree([poison]);
       } else if (hitPoison) {
-        // ЯД: сокращаем длину и штрафуем счёт
         score = Math.max(0, score - 1);
         document.getElementById("score").textContent = score;
 
-        // Укорачиваем хвост
         for (let i = 0; i < POISON_SHRINK; i++) {
-          if (snake.length > MIN_LENGTH) {
-            snake.pop();
-          }
+          if (snake.length > MIN_LENGTH) snake.pop();
         }
 
-        poison = randomFreeCell([food]); // новый яд
+        poison = randomFree([food]);
       } else {
-        // Обычное движение — удаляем последний сегмент
         snake.pop();
       }
 
       draw();
     }
 
-    // === Рисование ===
     function draw() {
-      // фон
       ctx.fillStyle = "#020617";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // лёгкая сетка
       ctx.strokeStyle = "#0f172a";
-      ctx.lineWidth = 1;
       for (let i = 0; i <= tileCount; i++) {
         ctx.beginPath();
         ctx.moveTo(i * gridSize + 0.5, 0);
@@ -279,138 +256,78 @@
         ctx.stroke();
       }
 
-      // еда — сердечко
-      ctx.fillStyle = "#ef4444";
+      // ☕ кофе — еда
       ctx.font = `${gridSize}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(
-        "♥",
-        food.x * gridSize + gridSize / 2,
-        food.y * gridSize + gridSize / 2
-      );
+      ctx.fillText("☕", food.x * gridSize + gridSize/2, food.y * gridSize + gridSize/2);
 
-      // яд (фиолетовый куб)
-      ctx.fillStyle = "#a855f7";
-      ctx.fillRect(
-        poison.x * gridSize + 2,
-        poison.y * gridSize + 2,
-        gridSize - 4,
-        gridSize - 4
-      );
+      // 🛑 стоп-знак — яд
+      ctx.fillText("🛑", poison.x * gridSize + gridSize/2, poison.y * gridSize + gridSize/2);
 
-      // змейка
-      snake.forEach((segment, index) => {
-        const isHead = index === 0;
-        ctx.fillStyle = isHead ? "#22c55e" : "#16a34a";
+      snake.forEach((s, i) => {
+        ctx.fillStyle = i === 0 ? "#22c55e" : "#16a34a";
         ctx.fillRect(
-          segment.x * gridSize + 2,
-          segment.y * gridSize + 2,
+          s.x * gridSize + 2,
+          s.y * gridSize + 2,
           gridSize - 4,
           gridSize - 4
         );
       });
     }
 
-    // === Завершение игры ===
-    function endGame() {
+    function end() {
       gameOver = true;
       setStatus(
         "Игра окончена. Счёт: <span>" +
           score +
-          "</span>. На ПК нажми <span>пробел</span>, чтобы начать заново; на телефоне просто перезагрузи страницу."
+          "</span>. ПК: пробел. Телефон: перезагрузить."
       );
     }
 
-    // === Управление: клавиатура (ПК) ===
     document.addEventListener("keydown", (e) => {
       if (gameOver && e.code === "Space") {
-        e.preventDefault();
         resetGame();
         return;
       }
 
       switch (e.key) {
-        case "ArrowUp":
-          if (velocity.y === 0) velocity = { x: 0, y: -1 };
-          break;
-        case "ArrowDown":
-          if (velocity.y === 0) velocity = { x: 0, y: 1 };
-          break;
-        case "ArrowLeft":
-          if (velocity.x === 0) velocity = { x: -1, y: 0 };
-          break;
-        case "ArrowRight":
-          if (velocity.x === 0) velocity = { x: 1, y: 0 };
-          break;
+        case "ArrowUp": if (velocity.y === 0) velocity = { x: 0, y: -1 }; break;
+        case "ArrowDown": if (velocity.y === 0) velocity = { x: 0, y: 1 }; break;
+        case "ArrowLeft": if (velocity.x === 0) velocity = { x: -1, y: 0 }; break;
+        case "ArrowRight": if (velocity.x === 0) velocity = { x: 1, y: 0 }; break;
       }
     });
 
-    // === Управление: свайпы по экрану (мобильные) ===
-    let touchStartX = null;
-    let touchStartY = null;
+    let sx = null, sy = null;
 
-    canvas.addEventListener(
-      "touchstart",
-      (e) => {
-        const t = e.touches[0];
-        touchStartX = t.clientX;
-        touchStartY = t.clientY;
-      },
-      { passive: false }
-    );
+    canvas.addEventListener("touchstart", (e) => {
+      const t = e.touches[0];
+      sx = t.clientX;
+      sy = t.clientY;
+    }, { passive: false });
 
-    canvas.addEventListener(
-      "touchmove",
-      (e) => {
-        // блокируем скролл страницы во время жеста
-        e.preventDefault();
-      },
-      { passive: false }
-    );
+    canvas.addEventListener("touchmove", (e) => { e.preventDefault(); }, { passive: false });
 
-    canvas.addEventListener(
-      "touchend",
-      (e) => {
-        if (touchStartX === null || touchStartY === null) return;
+    canvas.addEventListener("touchend", (e) => {
+      if (sx === null || sy === null) return;
 
-        const t = e.changedTouches[0];
-        const dx = t.clientX - touchStartX;
-        const dy = t.clientY - touchStartY;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - sx;
+      const dy = t.clientY - sy;
 
-        const absDx = Math.abs(dx);
-        const absDy = Math.abs(dy);
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0 && velocity.x === 0) velocity = { x: 1, y: 0 };
+        if (dx < 0 && velocity.x === 0) velocity = { x: -1, y: 0 };
+      } else {
+        if (dy > 0 && velocity.y === 0) velocity = { x: 0, y: 1 };
+        if (dy < 0 && velocity.y === 0) velocity = { x: 0, y: -1 };
+      }
 
-        const minSwipe = 20;
+      sx = sy = null;
+    }, { passive: false });
 
-        if (absDx < minSwipe && absDy < minSwipe) {
-          touchStartX = touchStartY = null;
-          return;
-        }
-
-        if (absDx > absDy) {
-          if (dx > 0 && velocity.x === 0) {
-            velocity = { x: 1, y: 0 }; // вправо
-          } else if (dx < 0 && velocity.x === 0) {
-            velocity = { x: -1, y: 0 }; // влево
-          }
-        } else {
-          if (dy > 0 && velocity.y === 0) {
-            velocity = { x: 0, y: 1 }; // вниз
-          } else if (dy < 0 && velocity.y === 0) {
-            velocity = { x: 0, y: -1 }; // вверх
-          }
-        }
-
-        touchStartX = touchStartY = null;
-      },
-      { passive: false }
-    );
-
-    // === Старт ===
     resetGame();
   </script>
 </body>
 </html>
-
-
