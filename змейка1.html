@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Мини-игра: Змейка (порталы + яд)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #020617;
+      color: #e5e7eb;
+    }
+
+    .game-wrapper {
+      background: #020617;
+      border-radius: 18px;
+      padding: 16px 18px 16px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
+      border: 1px solid #1f2937;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      max-width: 420px;
+      margin: 12px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+      gap: 8px;
+    }
+
+    .logo-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .logo-title img {
+      height: 32px;
+      width: auto;
+      border-radius: 8px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .title {
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #9ca3af;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .score {
+      font-size: 14px;
+      color: #e5e7eb;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .score span {
+      font-weight: 600;
+      color: #22c55e;
+    }
+
+    #game {
+      border-radius: 12px;
+      border: 1px solid #111827;
+      background: #020617;
+      image-rendering: pixelated;
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .status {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .status span {
+      color: #f97316;
+      font-weight: 500;
+    }
+
+    .legend {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+
+    .legend span {
+      font-weight: 500;
+    }
+
+    .controls {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .control-btn {
+      min-width: 56px;
+      min-height: 40px;
+      border-radius: 999px;
+      border: 1px solid #1f2933;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 18px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 12px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .control-btn:active {
+      transform: scale(0.95);
+      border-color: #22c55e;
+    }
+
+    @media (min-width: 768px) {
+      .controls {
+        display: none; /* На десктопе скрываем кнопки, оставляем клавиатуру */
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="game-wrapper">
+    <div class="header">
+      <div class="logo-title">
+        <!-- ЗДЕСЬ ТВОЙ ЛОГОТИП
+             Поставь свой файл, например: src="my-logo.png"
+             или ссылку: src="https://example.com/logo.png" -->
+        <img src="C:\Users\THETHR0NE7\OneDrive\Рабочий стол\змейка\assets" alt="Логотип" />
+        <div class="title"> любимая змейка у трона</div>
+      </div>
+      <div class="score">Счёт: <span id="score">0</span></div>
+    </div>
+
+    <canvas id="game" width="400" height="400"></canvas>
+
+    <div class="status" id="status">
+      ПК: стрелки — управление, <span>пробел</span> — перезапуск.
+      Мобильные: кнопки ниже.
+    </div>
+    <div class="legend">
+      <span>Красный куб</span> — еда (растёт длина, +1 очко).<br />
+      <span>Фиолетовый куб</span> — яд (уменьшает длину, −1 очко).<br />
+      Края поля — порталы: вылетел — появляешься с другой стороны.
+    </div>
+
+    <div class="controls">
+      <div class="controls-row">
+        <button class="control-btn" data-dir="up">↑</button>
+      </div>
+      <div class="controls-row">
+        <button class="control-btn" data-dir="left">←</button>
+        <button class="control-btn" data-dir="down">↓</button>
+        <button class="control-btn" data-dir="right">→</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // === Параметры поля ===
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const tileCount = 20; // 20×20
+    const gridSize = canvas.width / tileCount; // 400 / 20 = 20 px
+
+    // === Состояние игры ===
+    let snake;
+    let velocity;
+    let food;
+    let poison;
+    let score;
+    let gameOver;
+    let tickInterval = 110; // скорость (меньше = быстрее)
+    let timerId = null;
+
+    const MIN_LENGTH = 2;
+    const POISON_SHRINK = 2;
+
+    function setStatus(text) {
+      document.getElementById("status").innerHTML = text;
+    }
+
+    // === Инициализация игры ===
+    function resetGame() {
+      snake = [
+        { x: 10, y: 10 },
+        { x: 9, y: 10 },
+        { x: 8, y: 10 },
+      ];
+      velocity = { x: 1, y: 0 };
+      score = 0;
+      gameOver = false;
+      document.getElementById("score").textContent = score;
+
+      food = randomFreeCell();
+      poison = randomFreeCell([food]); // яд не совпадает с едой
+
+      setStatus(
+        "ПК: стрелки — управление, <span>пробел</span> — перезапуск. Мобильные: кнопки ниже."
+      );
+
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(update, tickInterval);
+      draw();
+    }
+
+    // === Выбор случайной свободной клетки ===
+    function randomFreeCell(extraBlocked = []) {
+      while (true) {
+        const x = Math.floor(Math.random() * tileCount);
+        const y = Math.floor(Math.random() * tileCount);
+
+        const onSnake = snake && snake.some((s) => s.x === x && s.y === y);
+        const onExtra = extraBlocked.some((p) => p.x === x && p.y === y);
+
+        if (!onSnake && !onExtra) {
+          return { x, y };
+        }
+      }
+    }
+
+    // === Основной шаг игры ===
+    function update() {
+      if (gameOver) return;
+
+      let nextX = snake[0].x + velocity.x;
+      let nextY = snake[0].y + velocity.y;
+
+      // Порталы по краям: тороидальное поле
+      if (nextX < 0) nextX = tileCount - 1;
+      if (nextX >= tileCount) nextX = 0;
+      if (nextY < 0) nextY = tileCount - 1;
+      if (nextY >= tileCount) nextY = 0;
+
+      const head = { x: nextX, y: nextY };
+
+      // Столкновение с собой
+      if (snake.some((segment) => segment.x === head.x && segment.y === head.y)) {
+        endGame();
+        return;
+      }
+
+      // Двигаем голову
+      snake.unshift(head);
+
+      const hitFood = head.x === food.x && head.y === food.y;
+      const hitPoison = head.x === poison.x && head.y === poison.y;
+
+      if (hitFood) {
+        // ЕДА: растём и набираем очки
+        score++;
+        document.getElementById("score").textContent = score;
+        food = randomFreeCell([poison]); // новая еда не совпадает с ядом
+      } else if (hitPoison) {
+        // ЯД: сокращаем длину и штрафуем счёт
+        score = Math.max(0, score - 1);
+        document.getElementById("score").textContent = score;
+
+        // Укорачиваем хвост
+        for (let i = 0; i < POISON_SHRINK; i++) {
+          if (snake.length > MIN_LENGTH) {
+            snake.pop();
+          }
+        }
+
+        poison = randomFreeCell([food]); // новый яд
+      } else {
+        // Обычное движение — удаляем последний сегмент
+        snake.pop();
+      }
+
+      draw();
+    }
+
+    // === Рисование ===
+    function draw() {
+      // фон
+      ctx.fillStyle = "#020617";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // лёгкая сетка
+      ctx.strokeStyle = "#0f172a";
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= tileCount; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * gridSize + 0.5, 0);
+        ctx.lineTo(i * gridSize + 0.5, canvas.height);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, i * gridSize + 0.5);
+        ctx.lineTo(canvas.width, i * gridSize + 0.5);
+        ctx.stroke();
+      }
+
+      // еда (красная)
+      ctx.fillStyle = "#ef4444";
+      ctx.fillRect(
+        food.x * gridSize + 2,
+        food.y * gridSize + 2,
+        gridSize - 4,
+        gridSize - 4
+      );
+
+      // яд (фиолетовый)
+      ctx.fillStyle = "#a855f7";
+      ctx.fillRect(
+        poison.x * gridSize + 2,
+        poison.y * gridSize + 2,
+        gridSize - 4,
+        gridSize - 4
+      );
+
+      // змейка
+      snake.forEach((segment, index) => {
+        const isHead = index === 0;
+        ctx.fillStyle = isHead ? "#22c55e" : "#16a34a";
+        ctx.fillRect(
+          segment.x * gridSize + 2,
+          segment.y * gridSize + 2,
+          gridSize - 4,
+          gridSize - 4
+        );
+      });
+    }
+
+    // === Завершение игры ===
+    function endGame() {
+      gameOver = true;
+      setStatus(
+        "Игра окончена. Счёт: <span>" +
+          score +
+          "</span>. Нажми <span>пробел</span> (ПК) или перезагрузи страницу на мобильном."
+      );
+    }
+
+    // === Управление: клавиатура ===
+    document.addEventListener("keydown", (e) => {
+      if (gameOver && e.code === "Space") {
+        e.preventDefault();
+        resetGame();
+        return;
+      }
+
+      switch (e.key) {
+        case "ArrowUp":
+          if (velocity.y === 0) velocity = { x: 0, y: -1 };
+          break;
+        case "ArrowDown":
+          if (velocity.y === 0) velocity = { x: 0, y: 1 };
+          break;
+        case "ArrowLeft":
+          if (velocity.x === 0) velocity = { x: -1, y: 0 };
+          break;
+        case "ArrowRight":
+          if (velocity.x === 0) velocity = { x: 1, y: 0 };
+          break;
+      }
+    });
+
+    // === Управление: мобильные кнопки ===
+    function setDirection(dir) {
+      switch (dir) {
+        case "up":
+          if (velocity.y === 0) velocity = { x: 0, y: -1 };
+          break;
+        case "down":
+          if (velocity.y === 0) velocity = { x: 0, y: 1 };
+          break;
+        case "left":
+          if (velocity.x === 0) velocity = { x: -1, y: 0 };
+          break;
+        case "right":
+          if (velocity.x === 0) velocity = { x: 1, y: 0 };
+          break;
+      }
+    }
+
+    document.querySelectorAll(".control-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const dir = btn.getAttribute("data-dir");
+        setDirection(dir);
+      });
+    });
+
+    // === Старт ===
+    resetGame();
+  </script>
+</body>
+</html>
