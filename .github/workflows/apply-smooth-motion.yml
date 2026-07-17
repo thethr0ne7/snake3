@@ -1,0 +1,212 @@
+name: Apply Flowseal-style smooth motion
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-smooth-motion.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch SnakeGame renderer without replacing the game
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          marker = 'FLOWSEAL_SMOOTH_MOTION_V1'
+          if marker in text:
+              print('Smooth motion patch already present')
+              raise SystemExit(0)
+
+          class_start = text.find('class SnakeGame')
+          if class_start < 0:
+              raise SystemExit('SnakeGame class not found')
+
+          brace_start = text.find('{', class_start)
+          depth = 0
+          class_end = None
+          for i in range(brace_start, len(text)):
+              ch = text[i]
+              if ch == '{': depth += 1
+              elif ch == '}':
+                  depth -= 1
+                  if depth == 0:
+                      class_end = i
+                      break
+          if class_end is None:
+              raise SystemExit('SnakeGame class closing brace not found')
+
+          class_src = text[brace_start + 1:class_end]
+          method_re = re.compile(r'(?m)^\s{4}([A-Za-z_$][\w$]*)\s*\([^\n]*\)\s*\{')
+          methods = []
+          for m in method_re.finditer(class_src):
+              start = m.start()
+              open_brace = class_src.find('{', m.start())
+              d = 0
+              end = None
+              for j in range(open_brace, len(class_src)):
+                  if class_src[j] == '{': d += 1
+                  elif class_src[j] == '}':
+                      d -= 1
+                      if d == 0:
+                          end = j + 1
+                          break
+              if end:
+                  methods.append((m.group(1), start, end, class_src[start:end]))
+
+          candidates = [x for x in methods if 'this.snake' in x[3] and ('fillRect' in x[3] or 'roundRect' in x[3] or 'arc(' in x[3])]
+          if not candidates:
+              raise SystemExit('Snake drawing method not detected')
+          name, start, end, source = max(candidates, key=lambda x: len(x[3]))
+          legacy_name = '__legacy_' + name
+          renamed = re.sub(r'(?m)^(\s{4})' + re.escape(name) + r'(\s*\()', r'\1' + legacy_name + r'\2', source, count=1)
+          class_src = class_src[:start] + renamed + class_src[end:]
+
+          smooth_method = f'''
+
+              /* {marker}: visual interpolation inspired by Platane/snk */
+              {name}() {{
+                const now = performance.now();
+                const current = Array.isArray(this.snake)
+                  ? this.snake.map(p => ({{ x: p.x, y: p.y }}))
+                  : [];
+
+                if (!this.__smoothCurrent) {{
+                  this.__smoothPrevious = current.map(p => ({{...p}}));
+                  this.__smoothCurrent = current.map(p => ({{...p}}));
+                  this.__smoothStartedAt = now;
+                }} else if (this.__smoothSnapshotKey !== JSON.stringify(current)) {{
+                  this.__smoothPrevious = this.__smoothCurrent.map(p => ({{...p}}));
+                  this.__smoothCurrent = current.map(p => ({{...p}}));
+                  this.__smoothStartedAt = now;
+                  this.__smoothSnapshotKey = JSON.stringify(current);
+                }}
+
+                this.{legacy_name}();
+                this.__drawSmoothSnake(now);
+
+                if (!this.__smoothFrame) {{
+                  const animate = (time) => {{
+                    this.__smoothFrame = requestAnimationFrame(animate);
+                    if (this.isPaused || this.gameOver) return;
+                    this.{legacy_name}();
+                    this.__drawSmoothSnake(time);
+                  }};
+                  this.__smoothFrame = requestAnimationFrame(animate);
+                }}
+              }}
+
+              __smoothWrappedLerp(a, b, t) {{
+                const count = this.TILE_COUNT || 20;
+                let delta = b - a;
+                if (Math.abs(delta) > count / 2) delta -= Math.sign(delta) * count;
+                let value = a + delta * t;
+                value = ((value % count) + count) % count;
+                return value;
+              }}
+
+              __drawSmoothSnake(time) {{
+                const ctx = this.ctx;
+                const size = this.GRID_SIZE || 20;
+                const duration = Math.max(80, this.speed || this.INITIAL_SPEED || 180);
+                const raw = Math.min(1, Math.max(0, (time - this.__smoothStartedAt) / duration));
+                const t = raw * raw * (3 - 2 * raw);
+                const next = this.__smoothCurrent || [];
+                const prev = this.__smoothPrevious || next;
+                if (!next.length) return;
+
+                const points = next.map((p, i) => {{
+                  const old = prev[Math.min(i, Math.max(0, prev.length - 1))] || p;
+                  return {{
+                    x: (this.__smoothWrappedLerp(old.x, p.x, t) + 0.5) * size,
+                    y: (this.__smoothWrappedLerp(old.y, p.y, t) + 0.5) * size
+                  }};
+                }});
+
+                // Mask the old tile-based snake only; keep food, poison and UI intact.
+                const mask = [...prev, ...next];
+                ctx.save();
+                for (const p of mask) {{
+                  ctx.fillStyle = '#020617';
+                  ctx.fillRect(p.x * size + 1, p.y * size + 1, size - 2, size - 2);
+                }}
+
+                if (points.length > 1) {{
+                  ctx.beginPath();
+                  ctx.moveTo(points[0].x, points[0].y);
+                  for (let i = 1; i < points.length - 1; i++) {{
+                    const midX = (points[i].x + points[i + 1].x) / 2;
+                    const midY = (points[i].y + points[i + 1].y) / 2;
+                    ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+                  }}
+                  const tail = points[points.length - 1];
+                  ctx.lineTo(tail.x, tail.y);
+                  ctx.lineCap = 'round';
+                  ctx.lineJoin = 'round';
+                  ctx.strokeStyle = '#16a34a';
+                  ctx.lineWidth = size * 0.72;
+                  ctx.shadowColor = 'rgba(34,197,94,.55)';
+                  ctx.shadowBlur = 10;
+                  ctx.stroke();
+                }}
+
+                const head = points[0];
+                const dir = this.direction || {{x: 1, y: 0}};
+                const angle = Math.atan2(dir.y || 0, dir.x || 1);
+                ctx.translate(head.x, head.y);
+                ctx.rotate(angle);
+                ctx.shadowColor = 'rgba(34,197,94,.8)';
+                ctx.shadowBlur = 14;
+                ctx.fillStyle = '#22c55e';
+                ctx.beginPath();
+                ctx.arc(0, 0, size * 0.43, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#020617';
+                ctx.beginPath();
+                ctx.arc(size * 0.16, -size * 0.16, size * 0.055, 0, Math.PI * 2);
+                ctx.arc(size * 0.16, size * 0.16, size * 0.055, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+              }}
+          '''
+
+          class_src = class_src + smooth_method
+          patched = text[:brace_start + 1] + class_src + text[class_end:]
+          path.write_text(patched, encoding='utf-8')
+          print(f'Patched renderer method: {name}')
+          PY
+
+      - name: Bump service worker cache
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('sw.js')
+          if p.exists():
+              s = p.read_text(encoding='utf-8')
+              s = s.replace("snake3-v2", "snake3-v3").replace("snake3-v1", "snake3-v3")
+              p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Commit patched motion
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html sw.js
+          git diff --cached --quiet && exit 0
+          git commit -m "Add Flowseal-style smooth snake motion [skip ci]"
+          git push
