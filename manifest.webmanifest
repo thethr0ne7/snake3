@@ -1,0 +1,11 @@
+{
+  "name": "Snake 3 — Neon Run",
+  "short_name": "Snake 3",
+  "description": "Мобильная неоновая Snake-игра с Telegram haptics и локальным рекордом.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "icons": []
+}
